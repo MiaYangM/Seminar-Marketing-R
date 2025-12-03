@@ -105,21 +105,32 @@ if (nrow(dup_summary) == 0) {
     # After replacements, ensure attribute columns are characters (for text building)
     design[, (attr_cols) := lapply(.SD, as.character), .SDcols = attr_cols]
     # Adjust the order/format
-    if (all(c("download_speed", "contract_length", "router_included", "bundles", "price") %in% names(design))) {
-      design[, text := paste0(
-        "Download Speed: ", download_speed, "; ",
-        "Contract length: ", contract_length, "; ",
-        "Router included: ", router_included, "; ",
-        "Bundles: ", bundles, "; ",
-        "Price: ", price
-      )]
-    } else {
-      # generic fallback: join all attribute columns
-      design[, text := do.call(paste, c(.SD, sep = "; ")), .SDcols = attr_cols]
-    }
+    attr_order <- c("download_speed", "router_included", "bundles", "price")
+    present_attrs <- intersect(attr_order, names(design))
+    label_map <- list(
+      download_speed = "Download speed",
+      router_included = "Router included",
+      bundles = "Bundles",
+      price = "Price"
+    )
     
-    # remove pid helper column
-    design[, pid := NULL]
+    # Create text by iterating over rows to preserve order and handle missing attrs gracefully
+    design[, text := {
+      pieces <- character(0)
+      for (a in attr_order) {
+        if (a %in% names(design)) {
+          val <- as.character(.SD[[a]])
+          # skip NA or empty values
+          if (!is.na(val) && nzchar(val)) {
+            pieces <- c(pieces, paste0(label_map[[a]], ": ", val))
+          }
+        }
+      }
+      paste(pieces, collapse = "; ")
+    }, by = seq_len(nrow(design))]
+    
+    # remove helper pid if present
+    if ("pid" %in% names(design)) design[, pid := NULL]
     
     
     # Save fixed design and report
@@ -134,5 +145,5 @@ if (nrow(dup_summary) == 0) {
       cat("Warning: some duplicates remain after fix. See dup_summary2 below:\n")
       print(dup_summary2)
     }
-  } # end do_fix
+  #end do_fix
 } 
