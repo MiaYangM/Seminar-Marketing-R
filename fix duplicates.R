@@ -102,11 +102,31 @@ if (nrow(dup_summary) == 0) {
       }
     }
     cat(sprintf("\nReplacements made: %d\n", replacements_made))
+    # After replacements, ensure attribute columns are characters (for text building)
+    design[, (attr_cols) := lapply(.SD, as.character), .SDcols = attr_cols]
+    # Adjust the order/format
+    if (all(c("download_speed", "contract_length", "router_included", "bundles", "price") %in% names(design))) {
+      design[, text := paste0(
+        "Download Speed: ", download_speed, "; ",
+        "Contract length: ", contract_length, "; ",
+        "Router included: ", router_included, "; ",
+        "Bundles: ", bundles, "; ",
+        "Price: ", price
+      )]
+    } else {
+      # generic fallback: join all attribute columns
+      design[, text := do.call(paste, c(.SD, sep = "; ")), .SDcols = attr_cols]
+    }
     
     # remove pid helper column
     design[, pid := NULL]
     
-    # Re-run duplicate check
+    
+    # Save fixed design and report
+    fwrite(design, "design_fixed_duplicates.csv", quote = TRUE)
+    cat("Wrote design_fixed_duplicates.csv to working directory.\n")
+    
+    # Re-check duplicates
     dup_summary2 <- design[, .N, by = c("cs", attr_cols)][N > 1]
     if (nrow(dup_summary2) == 0) {
       cat("Duplicates fixed. No duplicates remain.\n")
@@ -114,25 +134,5 @@ if (nrow(dup_summary) == 0) {
       cat("Warning: some duplicates remain after fix. See dup_summary2 below:\n")
       print(dup_summary2)
     }
-    
-    # (optional) save fixed design
-    fwrite(design, "design_fixed_duplicates.csv", quote = TRUE)
-    cat("Wrote design_fixed_duplicates.csv to working directory.\n")
   } # end do_fix
-} # end else duplicates found
-#########
-#Found duplicated alternatives within these choice sets 2 and 16.
-# pruce not numerical values
-
-library(data.table)
-design_fixed <- fread("design_fixed_duplicates.csv")   # or load the design object if still in memory
-design_fixed[cs %in% c(2,16)]
-
-design_fixed[, price := as.numeric(as.character(price))]
-# check for NAs after conversion:
-any(is.na(design_fixed$price))
-
-### double check any duplicates remain
-attr_cols <- setdiff(names(design_fixed), c("cs","alt","text"))
-dup_summary2 <- design_fixed[, .N, by = c("cs", attr_cols)][N > 1]
-dup_summary2  
+} 
